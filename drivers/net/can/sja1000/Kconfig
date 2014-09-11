@@ -107,4 +107,10 @@ config CAN_TSCAN1
 	  IRQ numbers are read from jumpers JP4 and JP5,
 	  SJA1000 IO base addresses are chosen heuristically (first that works).
 
+config CAN_SJA1000_RASPI
+	tristate "PANDA RasPi SJA1000 driver"
+	---help---
+	  This driver adds legacy support for the PANDA Raspberry Pi CAN bus
+	  Extension Board.
+
 endif
