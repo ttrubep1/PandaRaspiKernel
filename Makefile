@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 12
 SUBLEVEL = 28
-EXTRAVERSION = pandadcs
+EXTRAVERSION = -pandadcs
 NAME = One Giant Leap for Frogkind
 
 # *DOCUMENTATION*
