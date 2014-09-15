@@ -58,6 +58,11 @@ modules.builtin
 !.mailmap
 
 #
+# PANDA DCS patch: Include "default" configuration for PANDA DCS RasPi kernel into repository
+#
+!.config
+
+#
 # Generated include files
 #
 include/config
