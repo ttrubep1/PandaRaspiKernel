@@ -411,15 +411,15 @@ static int bcm2708_i2s_hw_params(struct snd_pcm_substream *substream,
 	switch (params_format(params)) {
 	case SNDRV_PCM_FORMAT_S16_LE:
 		data_length = 16;
-		bclk_ratio = 40;
+		bclk_ratio = 50;
 		break;
 	case SNDRV_PCM_FORMAT_S24_LE:
 		data_length = 24;
-		bclk_ratio = 40;
+		bclk_ratio = 50;
 		break;
 	case SNDRV_PCM_FORMAT_S32_LE:
 		data_length = 32;
-		bclk_ratio = 80;
+		bclk_ratio = 100;
 		break;
 	default:
 		return -EINVAL;
@@ -785,7 +785,7 @@ static struct snd_soc_dai_driver bcm2708_i2s_dai = {
 		.channels_max = 2,
 		.rates =	SNDRV_PCM_RATE_8000_192000,
 		.formats =	SNDRV_PCM_FMTBIT_S16_LE
-				// | SNDRV_PCM_FMTBIT_S24_LE : disable for now, it causes white noise with xbmc
+				| SNDRV_PCM_FMTBIT_S24_LE
 				| SNDRV_PCM_FMTBIT_S32_LE
 		},
 	.capture = {
