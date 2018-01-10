@@ -5,6 +5,12 @@
  * Copyright (C) 2014 Florian Feldbauer <florian@ep1.ruhr-uni-bochum.de>
  *                    - Ruhr-Universitaet Bochum, Lehrstuhl fuer Experimentalphysik I
  *
+ * Copyright (C) 2018 Tobias Triffterer <tobias@ep1.ruhr-uni-bochum.de>
+ *                    - Ruhr-Universität Bochum, Institut für Experimentalphysik I
+ *                    2018-01-10: Adapted module to use device tree instead of GPIO_BASE
+ *                    which is no longer available as mach/platform.h has been removed
+ *                    for the Raspberry Pi.
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the version 2 of the GNU General Public License
  * as published by the Free Software Foundation
@@ -28,12 +34,13 @@
 #include <linux/delay.h>
 #include <linux/irq.h>
 #include <linux/io.h>
+#include <linux/of.h>
+#include <linux/of_address.h>
 #include <linux/can/dev.h>
 #include <linux/can/platform/sja1000.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/gpio.h>
-#include <mach/platform.h>
 
 #include "sja1000.h"
 
@@ -219,8 +226,36 @@ static void sja1000_raspi_write_reg( const struct sja1000_priv *priv,
 static int sja1000_raspi_probe( struct platform_device *pdev ) {
   struct net_device *dev;
   struct sja1000_priv *priv;
-  void __iomem *base = __io_address( GPIO_BASE );
-  int err;
+  struct device_node *dn;
+  struct resource res;
+  u32 address = 0, size = 0;
+  void __iomem *base = NULL;
+  int err = 0;
+
+  dn = of_find_node_by_name(NULL, "gpio");
+  if (dn == NULL) {
+    printk(KERN_ERR "%s: Cannot find device tree node \"gpio\"!", DRV_NAME);
+    err = -ENXIO;
+    goto exit;
+  }
+
+  err = of_address_to_resource(dn, 0, &res);
+  if (err)
+  {
+    printk(KERN_ERR "%s: Could not retrieve GPIO base address from device tree! Error: %d", DRV_NAME, err);
+    goto exit;
+  }
+  address = res.start;
+  size = resource_size(&res);
+  printk(KERN_INFO "%s: Got GPIO base address 0x%x, size 0x%x", DRV_NAME, address, size);
+  
+  base = ioremap(address, size);
+  if (base == NULL) {
+    printk(KERN_ERR "%s: Cannot map memory for GPIO access! Address: %x, Size: %x", DRV_NAME, address, size);
+    err = -EIO;
+    goto exit;
+  }
+  printk(KERN_INFO "%s: Got GPIO memory mapping from ioremap(): 0x%x", DRV_NAME, (u32)base);
 
   /* request used GPIO lines */
   err = gpio_request_one( ALE, GPIOF_OUT_INIT_LOW, "ALE" );
@@ -294,6 +329,8 @@ static int sja1000_raspi_probe( struct platform_device *pdev ) {
   gpio_free( nCS );
   gpio_free_array( ADi, ARRAY_SIZE(ADi) );
   gpio_free( nIRQ );
+  if (base != NULL)
+    iounmap(base);
   return err;
 }
 
@@ -301,7 +338,7 @@ static int sja1000_raspi_probe( struct platform_device *pdev ) {
 
 static int sja1000_raspi_remove( struct platform_device *pdev ) {
   struct net_device *dev = platform_get_drvdata( pdev );
-  /*struct sja1000_priv *priv = netdev_priv( dev );*/
+  struct sja1000_priv *priv = netdev_priv( dev );
 
   unregister_sja1000dev( dev );
   free_sja1000dev( dev );
@@ -312,6 +349,8 @@ static int sja1000_raspi_remove( struct platform_device *pdev ) {
   gpio_free( nCS );
   gpio_free_array( ADi, ARRAY_SIZE(ADi) );
   gpio_free( nIRQ );
+
+  iounmap(priv->reg_base);
 
   return 0;
 }
