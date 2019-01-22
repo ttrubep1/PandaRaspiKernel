@@ -1,11 +1,14 @@
 # Overlays for the Raspberry Pi platform
 
 dtbo-$(CONFIG_ARCH_BCM2835) += \
+	3dlab-nano-player.dtbo \
 	adau1977-adc.dtbo \
 	adau7002-simple.dtbo \
 	ads1015.dtbo \
 	ads1115.dtbo \
 	ads7846.dtbo \
+	adv7282m.dtbo \
+	adv728x-m.dtbo \
 	akkordion-iqdacplus.dtbo \
 	allo-boss-dac-pcm512x-audio.dtbo \
 	allo-digione.dtbo \
@@ -15,7 +18,9 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	applepi-dac.dtbo \
 	at86rf233.dtbo \
 	audioinjector-addons.dtbo \
+	audioinjector-ultra.dtbo \
 	audioinjector-wm8731-audio.dtbo \
+	audiosense-pi.dtbo \
 	audremap.dtbo \
 	balena-fin.dtbo \
 	bmp085_i2c-sensor.dtbo \
@@ -32,12 +37,15 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	fe-pi-audio.dtbo \
 	goodix.dtbo \
 	googlevoicehat-soundcard.dtbo \
+	gpio-fan.dtbo \
 	gpio-ir.dtbo \
 	gpio-ir-tx.dtbo \
 	gpio-key.dtbo \
+	gpio-no-bank0-irq.dtbo \
 	gpio-no-irq.dtbo \
 	gpio-poweroff.dtbo \
 	gpio-shutdown.dtbo \
+	hd44780-lcd.dtbo \
 	hifiberry-amp.dtbo \
 	hifiberry-dac.dtbo \
 	hifiberry-dacplus.dtbo \
@@ -45,6 +53,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	hifiberry-digi-pro.dtbo \
 	hy28a.dtbo \
 	hy28b.dtbo \
+	hy28b-2017.dtbo \
 	i2c-bcm2708.dtbo \
 	i2c-gpio.dtbo \
 	i2c-mux.dtbo \
@@ -70,12 +79,14 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	mcp2515-can1.dtbo \
 	mcp3008.dtbo \
 	mcp3202.dtbo \
+	mcp342x.dtbo \
 	media-center.dtbo \
 	midi-uart0.dtbo \
 	midi-uart1.dtbo \
 	mmc.dtbo \
 	mpu6050.dtbo \
 	mz61581.dtbo \
+	ov5647.dtbo \
 	papirus.dtbo \
 	pi3-act-led.dtbo \
 	pi3-disable-bt.dtbo \
@@ -100,6 +111,7 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	rpi-dac.dtbo \
 	rpi-display.dtbo \
 	rpi-ft5406.dtbo \
+	rpi-poe.dtbo \
 	rpi-proto.dtbo \
 	rpi-sense.dtbo \
 	rpi-tv.dtbo \
@@ -124,14 +136,19 @@ dtbo-$(CONFIG_ARCH_BCM2835) += \
 	spi2-1cs.dtbo \
 	spi2-2cs.dtbo \
 	spi2-3cs.dtbo \
+	ssd1306.dtbo \
 	superaudioboard.dtbo \
 	sx150x.dtbo \
+	tc358743.dtbo \
+	tc358743-audio.dtbo \
 	tinylcd35.dtbo \
+	tpm-slb9670.dtbo \
 	uart0.dtbo \
 	uart1.dtbo \
 	upstream.dtbo \
 	upstream-aux-interrupt.dtbo \
 	vc4-fkms-v3d.dtbo \
+	vc4-kms-kippah-7inch.dtbo \
 	vc4-kms-v3d.dtbo \
 	vga666.dtbo \
 	w1-gpio.dtbo \

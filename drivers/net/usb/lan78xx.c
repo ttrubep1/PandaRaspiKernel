@@ -36,7 +36,8 @@
 #include <linux/irq.h>
 #include <linux/irqchip/chained_irq.h>
 #include <linux/microchipphy.h>
-#include <linux/phy.h>
+#include <linux/phy_fixed.h>
+#include <linux/of_mdio.h>
 #include <linux/of_net.h>
 #include "lan78xx.h"
 
@@ -423,6 +424,11 @@ MODULE_PARM_DESC(msg_level, "Override default message level");
 static bool enable_tso;
 module_param(enable_tso, bool, 0644);
 MODULE_PARM_DESC(enable_tso, "Enables TCP segmentation offload");
+
+#define INT_URB_MICROFRAMES_PER_MS	8
+static int int_urb_interval_ms = 8;
+module_param(int_urb_interval_ms, int, 0);
+MODULE_PARM_DESC(int_urb_interval_ms, "Override usb interrupt urb interval");
 
 static int lan78xx_read_reg(struct lan78xx_net *dev, u32 index, u32 *data)
 {
@@ -1227,6 +1233,8 @@ static int lan78xx_link_reset(struct lan78xx_net *dev)
 			mod_timer(&dev->stat_monitor,
 				  jiffies + STAT_UPDATE_TIMER);
 		}
+
+		tasklet_schedule(&dev->bh);
 	}
 
 	return ret;
@@ -1384,19 +1392,10 @@ static int lan78xx_set_wol(struct net_device *netdev,
 	if (ret < 0)
 		return ret;
 
-	pdata->wol = 0;
-	if (wol->wolopts & WAKE_UCAST)
-		pdata->wol |= WAKE_UCAST;
-	if (wol->wolopts & WAKE_MCAST)
-		pdata->wol |= WAKE_MCAST;
-	if (wol->wolopts & WAKE_BCAST)
-		pdata->wol |= WAKE_BCAST;
-	if (wol->wolopts & WAKE_MAGIC)
-		pdata->wol |= WAKE_MAGIC;
-	if (wol->wolopts & WAKE_PHY)
-		pdata->wol |= WAKE_PHY;
-	if (wol->wolopts & WAKE_ARP)
-		pdata->wol |= WAKE_ARP;
+	if (wol->wolopts & ~WAKE_ALL)
+		return -EINVAL;
+
+	pdata->wol = wol->wolopts;
 
 	device_set_wakeup_enable(&dev->udev->dev, (bool)wol->wolopts);
 
@@ -1663,44 +1662,31 @@ static void lan78xx_init_mac_address(struct lan78xx_net *dev)
 	addr[5] = (addr_hi >> 8) & 0xFF;
 
 	if (!is_valid_ether_addr(addr)) {
-		const u8 *mac_addr;
-
-		/* maybe the boot loader passed the MAC address in devicetree */
-		mac_addr = of_get_mac_address(dev->udev->dev.of_node);
-		if (mac_addr) {
-			ether_addr_copy(addr, mac_addr);
-			goto set_mac_addr;
-		}
-
-		/* reading mac address from EEPROM or OTP */
-		if ((lan78xx_read_eeprom(dev, EEPROM_MAC_OFFSET, ETH_ALEN,
-					 addr) == 0) ||
-		    (lan78xx_read_otp(dev, EEPROM_MAC_OFFSET, ETH_ALEN,
-				      addr) == 0)) {
-			if (is_valid_ether_addr(addr)) {
-				/* eeprom values are valid so use them */
-				netif_dbg(dev, ifup, dev->net,
-					  "MAC address read from EEPROM");
-			} else {
-				/* generate random MAC */
-				random_ether_addr(addr);
-				netif_dbg(dev, ifup, dev->net,
-					  "MAC address set to random addr");
-			}
-
-set_mac_addr:
-			addr_lo = addr[0] | (addr[1] << 8) |
-				  (addr[2] << 16) | (addr[3] << 24);
-			addr_hi = addr[4] | (addr[5] << 8);
-
-			ret = lan78xx_write_reg(dev, RX_ADDRL, addr_lo);
-			ret = lan78xx_write_reg(dev, RX_ADDRH, addr_hi);
+		if (!eth_platform_get_mac_address(&dev->udev->dev, addr)) {
+			/* valid address present in Device Tree */
+			netif_dbg(dev, ifup, dev->net,
+				  "MAC address read from Device Tree");
+		} else if (((lan78xx_read_eeprom(dev, EEPROM_MAC_OFFSET,
+						 ETH_ALEN, addr) == 0) ||
+			    (lan78xx_read_otp(dev, EEPROM_MAC_OFFSET,
+					      ETH_ALEN, addr) == 0)) &&
+			   is_valid_ether_addr(addr)) {
+			/* eeprom values are valid so use them */
+			netif_dbg(dev, ifup, dev->net,
+				  "MAC address read from EEPROM");
 		} else {
 			/* generate random MAC */
 			random_ether_addr(addr);
 			netif_dbg(dev, ifup, dev->net,
 				  "MAC address set to random addr");
 		}
+
+		addr_lo = addr[0] | (addr[1] << 8) |
+			  (addr[2] << 16) | (addr[3] << 24);
+		addr_hi = addr[4] | (addr[5] << 8);
+
+		ret = lan78xx_write_reg(dev, RX_ADDRL, addr_lo);
+		ret = lan78xx_write_reg(dev, RX_ADDRH, addr_hi);
 	}
 
 	ret = lan78xx_write_reg(dev, MAF_LO(0), addr_lo);
@@ -1783,6 +1769,7 @@ done:
 
 static int lan78xx_mdio_init(struct lan78xx_net *dev)
 {
+	struct device_node *node;
 	int ret;
 
 	dev->mdiobus = mdiobus_alloc();
@@ -1811,7 +1798,9 @@ static int lan78xx_mdio_init(struct lan78xx_net *dev)
 		break;
 	}
 
-	ret = mdiobus_register(dev->mdiobus);
+	node = of_get_child_by_name(dev->udev->dev.of_node, "mdio");
+	ret = of_mdiobus_register(dev->mdiobus, node);
+	of_node_put(node);
 	if (ret) {
 		netdev_err(dev->net, "can't register MDIO bus\n");
 		goto exit1;
@@ -2282,6 +2271,10 @@ static int lan78xx_set_mac_addr(struct net_device *netdev, void *p)
 
 	ret = lan78xx_write_reg(dev, RX_ADDRL, addr_lo);
 	ret = lan78xx_write_reg(dev, RX_ADDRH, addr_hi);
+
+	/* Added to support MAC address changes */
+	ret = lan78xx_write_reg(dev, MAF_LO(0), addr_lo);
+	ret = lan78xx_write_reg(dev, MAF_HI(0), addr_hi | MAF_HI_VALID_);
 
 	return 0;
 }
@@ -3292,6 +3285,7 @@ static void lan78xx_tx_bh(struct lan78xx_net *dev)
 	pkt_cnt = 0;
 	count = 0;
 	length = 0;
+	spin_lock_irqsave(&tqp->lock, flags);
 	for (skb = tqp->next; pkt_cnt < tqp->qlen; skb = skb->next) {
 		if (skb_is_gso(skb)) {
 			if (pkt_cnt) {
@@ -3300,7 +3294,8 @@ static void lan78xx_tx_bh(struct lan78xx_net *dev)
 			}
 			count = 1;
 			length = skb->len - TX_OVERHEAD;
-			skb2 = skb_dequeue(tqp);
+			__skb_unlink(skb, tqp);
+			spin_unlock_irqrestore(&tqp->lock, flags);
 			goto gso_skb;
 		}
 
@@ -3309,6 +3304,7 @@ static void lan78xx_tx_bh(struct lan78xx_net *dev)
 		skb_totallen = skb->len + roundup(skb_totallen, sizeof(u32));
 		pkt_cnt++;
 	}
+	spin_unlock_irqrestore(&tqp->lock, flags);
 
 	/* copy to a single skb */
 	skb = alloc_skb(skb_totallen, GFP_ATOMIC);
@@ -3721,7 +3717,12 @@ static int lan78xx_probe(struct usb_interface *intf,
 	dev->pipe_intr = usb_rcvintpipe(dev->udev,
 					dev->ep_intr->desc.bEndpointAddress &
 					USB_ENDPOINT_NUMBER_MASK);
-	period = dev->ep_intr->desc.bInterval;
+	if (int_urb_interval_ms <= 0)
+		period = dev->ep_intr->desc.bInterval;
+	else
+		period = int_urb_interval_ms * INT_URB_MICROFRAMES_PER_MS;
+
+	netif_notice(dev, probe, netdev, "int urb period %d\n", period);
 
 	maxp = usb_maxpacket(dev->udev, dev->pipe_intr, 0);
 	buf = kmalloc(maxp, GFP_KERNEL);

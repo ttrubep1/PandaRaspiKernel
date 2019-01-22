@@ -431,6 +431,20 @@ static int proc_pid_stack(struct seq_file *m, struct pid_namespace *ns,
 	int err;
 	int i;
 
+	/*
+	 * The ability to racily run the kernel stack unwinder on a running task
+	 * and then observe the unwinder output is scary; while it is useful for
+	 * debugging kernel issues, it can also allow an attacker to leak kernel
+	 * stack contents.
+	 * Doing this in a manner that is at least safe from races would require
+	 * some work to ensure that the remote task can not be scheduled; and
+	 * even then, this would still expose the unwinder as local attack
+	 * surface.
+	 * Therefore, this interface is restricted to root.
+	 */
+	if (!file_ns_capable(m->file, &init_user_ns, CAP_SYS_ADMIN))
+		return -EACCES;
+
 	entries = kmalloc(MAX_STACK_TRACE_DEPTH * sizeof(*entries), GFP_KERNEL);
 	if (!entries)
 		return -ENOMEM;
@@ -1693,6 +1707,12 @@ void task_dump_owner(struct task_struct *task, mode_t mode,
 	const struct cred *cred;
 	kuid_t uid;
 	kgid_t gid;
+
+	if (unlikely(task->flags & PF_KTHREAD)) {
+		*ruid = GLOBAL_ROOT_UID;
+		*rgid = GLOBAL_ROOT_GID;
+		return;
+	}
 
 	/* Default to the tasks effective ownership */
 	rcu_read_lock();
